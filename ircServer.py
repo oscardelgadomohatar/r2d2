@@ -13,7 +13,7 @@ class IRCServer(object):
     def __init__(self, sDroid):
         self.sd = sDroid
         
-    def connect(self, nick):
+    def connect(self, nick, ssl = False):
         
         # Si ya está establecida la conexión, nada que hacer
         if self.sd.connections.has_key(nick):
@@ -26,6 +26,8 @@ class IRCServer(object):
         try:
             # Intento de conexión            
             s.connect((self.sd.serverIP, self.sd.serverPort))
+            if ssl: s = socket.ssl(s)
+
             # Es necesario volver a establecer el socket como bloqueante
             # para la llamada a makefile
             s.settimeout(None)        
@@ -41,8 +43,12 @@ class IRCServer(object):
             # Comenzamos a parsear y comprobar las respuestas. Se descarta toda 
             # entrada hasta el primer código 001                       
             self.discardTill(nick, r":\S* 001 %s :.*" % nick)
-            self.discardAll(nick)                 
-        except Exception as e:
+            self.discardAll(nick)   
+
+            # Indicamos que todo ha ido bien
+            return True
+
+        except Exception as e:            
             raise e
         
     def shutDown(self):
@@ -114,8 +120,7 @@ class IRCServer(object):
              que salta el timeout (significa que no hay más mensajes)
     """
     def discardAll (self, nick):
-        
-        logging.debug ("discardAll")
+                
         while True:
             try:
                 line = self._readLine(nick, timeout=1)                

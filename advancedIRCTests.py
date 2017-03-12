@@ -104,7 +104,7 @@ class TestModoProteccionTopic(AdvancedTest):
         self.ircServer.expect(self.testNick2, r":\S+ 482 %s #%s :\S+" % (self.testNick2, nuevoCanal))                
         
         # Cerramos todas las conexiones
-        self.ircServer.tearDown()        
+        #self.ircServer.tearDown()        
         
         # Todo OK
         return self.getScore()
@@ -147,7 +147,7 @@ class TestModoCanalSecreto(AdvancedTest):
         assert "#"+nuevoCanal not in listaCanales, "El canal secreto #%s no debería aparecer en la lista de canales." % nuevoCanal                                
         
         # Cerramos todas las conexiones
-        self.ircServer.tearDown()
+        #self.ircServer.tearDown()
         
         # Todo OK
         return self.getScore()
@@ -213,7 +213,8 @@ es la adecuada."""
 class TestComandoQuit(AdvancedTest):
                     
     def execute(self):                       
-         
+        retCode = False
+
         # Conexión al servidor        
         self.ircServer.connect(self.testNick)
         
@@ -222,14 +223,20 @@ class TestComandoQuit(AdvancedTest):
 
         # Leemos salida hasta timeout porque algún servidor responde con estadísticas
         mensajes = self.ircServer.readAllLinesTill(self.testNick)                
-        
+
         # Ahora sí que deberíamos leer 0 bytes        
-        self.ircServer.send(self.testNick, "PRIVMSG %s :Hola, Luke" % self.testNick)
-        data = self.ircServer.sd.connections[self.testNick].read(1024)        
-        assert len(data) == 0, "El servidor no ha procesado correctamente el comando QUIT"        
+        data, num_bytes = self.ircServer.sd.sockets[self.testNick].recvfrom(1024)        
+        assert num_bytes == None, "El servidor no ha procesado correctamente el comando QUIT"        
+        
+        # Esperamos un poco
+        time.sleep(1)
+        self.ircServer.tearDown()
+
+        # Ahora nos volvemos a conectar, para comprobar que el servidor no se ha caido
+        retCode = self.ircServer.connect(self.testNick)
         
         # Cerramos todas las conexiones
-        self.ircServer.tearDown()
+        assert retCode == True, "El servidor parece haberse caido tras procesar el comando QUIT"
         
         # Todo OK
         return self.getScore()

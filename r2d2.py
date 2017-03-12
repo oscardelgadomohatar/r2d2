@@ -200,7 +200,7 @@ class ServerDroid(object):
 if __name__ == "__main__":
     
     # Recogemos las opciones de uso del usuario
-    arguments = docopt.docopt(__doc__, help = True, version='R2D2 Version 2.0 rev. 3')             
+    arguments = docopt.docopt(__doc__, help = True, version='R2D2 Version 2.0 rev. 5')             
     
     # Creamos el objeto principal
     sd = ServerDroid()    
