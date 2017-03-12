@@ -61,6 +61,7 @@ class IRCServer(object):
                 pass
 
     def tearDown(self):
+        logging.debug("Cerrando todas las conexiones activas...")
         try:        
             for x in self.sd.sockets.values():                
                 x.shutdown(socket.SHUT_WR)
@@ -76,28 +77,40 @@ class IRCServer(object):
         time.sleep(1)
         
     def send(self, nick, message):
-        logging.debug(">> SERVER: %s" % message)
-        self.sd.connections[nick].write(message + "\r\n")        
-        self.sd.connections[nick].flush()    
+        if nick in self.sd.connections:
+            logging.debug(">> envío a socket de %s: %s" % (nick,message))
+            self.sd.connections[nick].write(message + "\r\n")        
+            self.sd.connections[nick].flush()    
+        else:
+            raise AssertionError("El servidor ha cerrado el socket de %s, y no se ha podido mandar el mensaje: %s" % (nick,message))
             
     def _readLine(self, nick, regexp = "", timeout = 5):
         # Sorprendemente, Python 2.x no tiene soporte no bloqueante
         # para la función readline(), así que hay que utilizar este "truco"
         def timeout_handler(signum, frame):
-            raise AssertionError("Ha saltado el timeout esperando la expresión %r" % regexp)
+            if len(regexp) > 0:
+                raise AssertionError("Se esperaba recibir la expresión %s desde el socket de %s, pero ha saltado el timeout" % (regexp,nick))
+            else:
+                raise AssertionError("Se esperaba recibir datos desde el socket de %s, pero ha saltado el timeout" % nick)
         signal.signal(signal.SIGALRM, timeout_handler)
         
+        line = ""
+        emptyCount = 0
         while True:
             # Establecemos el timeout y leemos una línea
             signal.alarm(timeout)  
             line = self.sd.connections[nick].readline().rstrip()        
             signal.alarm(0)                
+            
+            if b'\x00' in line:
+                logging.debug("AVISO: Se ha detectado un carácter NULL dentro de la cadena enviada por el servidor.")
+                line = line.replace('\x00', '') # CGS: El curso que viene, esto dará un error
+                #raise AssertionError("Se ha detectado un carácter NULL dentro de la cadena enviada por el servidor.")
         
             # Si se trata de un PING enviado por el servidor, respondemos aquí
             # PING 1079550066
             # Reply: PONG 1079550066                              
                 
-            # Comprobamos que el nombre del directorio tiene el formato requerido, G-CCCC-NN-PX
             m = re.match(self.REGEXP_PING, line)
         
             if m is not None:
@@ -105,12 +118,36 @@ class IRCServer(object):
                 params = m.group(1)                                          
             
                 logging.debug("<< SERVER: %s" % line)            
-                self.send(nick, "PONG %s" % params)
+                pong_reply = "PONG %s" % params
+                pong_reply.rstrip('\r\n ')
+                self.send(nick, pong_reply)
             else:
-                # Si no se trata de un PING, salimos y devolvemos la línea leida
-                logging.debug("<< SERVER: %s" % line)
-                break
-            
+                if len(line) > 0 and len(line.rstrip('\r\n ')) > 0:
+                    # Si no se trata de un PING, salimos y devolvemos la línea leida
+                    logging.debug("<< socket de %s dice: %s" % (nick, line))
+                    break
+                else: # ignoramos líneas en blanco
+                    if emptyCount > 5: #detectamos cierres del socket
+                        break
+                    emptyCount += 1
+        if emptyCount > 5: # Cierre del socket desde el servidor
+            try:        
+                x = self.sd.sockets[nick]
+                x.shutdown(socket.SHUT_WR)
+                x.close()
+            except Exception:
+                pass
+            finally:
+                x = self.sd.connections[nick]
+                x.close()
+            del self.sd.sockets[nick]
+            del self.sd.connections[nick]
+            raise AssertionError("El socket de %s ha sido cerrado inesperadamente por parte del servidor" % nick)
+        if emptyCount > 0:
+            if emptyCount > 1:
+                logging.debug("AVISO: Recibidas %i líneas en blanco no esperadas por el socket de %s. Puede ser debido a excesivas llamadas a send(), o que el mensaje anterior tiene caracteres de fin de cadena mal formados" % (emptyCount, nick))
+            else:
+                logging.debug("AVISO: Recibida línea en blanco no esperada por el socket de %s. Puede ser debido a excesivas llamadas a send(), o que el mensaje anterior tiene caracteres de fin de cadena mal formados" % nick)
         return line
     
     """
@@ -120,12 +157,16 @@ class IRCServer(object):
              que salta el timeout (significa que no hay más mensajes)
     """
     def discardAll (self, nick):
-                
+        
+        logging.debug ("Vaciando la cola de recepción...")
+
         while True:
             try:
                 line = self._readLine(nick, timeout=1)                
                 
                 assert len(line) != 0
+                
+                #logging.debug("Descartando el mensaje recibido por el socket de %s (%s bytes): %s" % (nick, len(line), line))
                 
             except AssertionError:
                 break            
@@ -140,7 +181,7 @@ class IRCServer(object):
         
         # No, no hay bucles do-while en Python... :/
         while not m:
-            logging.debug("Discarded message [%s]: %s" % (len(line), line)) 
+            #logging.debug("Descartando el mensaje recibido por el socket de %s (%s bytes): %s" % (nick, len(line), line))
             line = self._readLine(nick, regexp)            
             m = re.match(regexp, line)
     
@@ -184,7 +225,7 @@ class IRCServer(object):
 #          
 #         return listaSalida
 #===============================================================================
-    
+
     def readAllLinesTill (self, nick, endCommand = ""):
         
         receivedMessages = {}                
@@ -193,26 +234,23 @@ class IRCServer(object):
         #line = self._readLine(nick, timeout = 1)                      
         line = self._readLine(nick)
         message = ircparser.translate(line)
-        receivedMessages[message['command']] = line
+        if message is not None:
+            receivedMessages[message['command']] = line
         
         # Si no se especifica un comando de finalización el siguiente bucle
         # es infinito hasta que salte un timeout. Si se especifica, se para
         # cuando se encuentra un comando de ese tipo
         while (endCommand == "" or \
-               message['command'] is not endCommand):
-            try:            
-                # Recepción y parseo de la respuesta
-                #line = self._readLine(nick, timeout = 1)                      
+               ((message is not None) and (message['command'] is not endCommand))):
+            try: 
                 line = self._readLine(nick)
                 message = ircparser.translate(line)
-                # Comprobamos que no es una línea vacia  
-                assert message is not None
                 
                 # Guardamos el mensaje recibido en el diccionario
-                receivedMessages[message['command']] = line
+                if message is not None:
+                    receivedMessages[message['command']] = line
             except AssertionError:
                 break
-        
         return receivedMessages
        
     def expect(self, nick, regexp):          
@@ -272,7 +310,10 @@ class IRCServer(object):
         self.send(tempNick, "LIST")
                           
         # Recepción y parseo de la respuesta                      
-        message = ircparser.translate(self._readLine(tempNick))                                        
+        leido = self._readLine(tempNick)
+        #assert len(leido) > 0, "Se ha recibido una respuesta vacía al comando LIST"
+        message = ircparser.translate(leido)                                        
+        
         
         while (message['command'] is not "RPL_LISTEND"):
             # Cada mensaje que se muestre en la respuesta suma puntuación                
@@ -297,7 +338,8 @@ class IRCServer(object):
         self.send(nick, "NAMES #%s" % nombreCanal)
                           
         # Recepción y parseo de la respuesta                      
-        message = ircparser.translate(self._readLine(nick))                                        
+        leido = self._readLine(nick)
+        message = ircparser.translate(leido)                                        
         
         while (message['command'] is not "RPL_ENDOFNAMES"):
             # Cada mensaje que se muestre en la respuesta suma puntuación                
@@ -305,7 +347,8 @@ class IRCServer(object):
                 listaUsuarios.append(message['params'][0])
                 
             # Recepción y parseo de la respuesta                      
-            message = ircparser.translate(self._readLine(nick))
+            leido = self._readLine(nick)
+            message = ircparser.translate(leido)
         
         return listaUsuarios
     

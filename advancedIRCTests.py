@@ -218,9 +218,8 @@ class TestComandoQuit(AdvancedTest):
         # Conexión al servidor        
         self.ircServer.connect(self.testNick)
         
-        # Solicitamos que el servidor nos marque como AWAY        
         self.ircServer.send(self.testNick, "QUIT :Que la fuerza te acompañe...")
-
+        
         # Leemos salida hasta timeout porque algún servidor responde con estadísticas
         mensajes = self.ircServer.readAllLinesTill(self.testNick)                
 
@@ -262,7 +261,6 @@ class TestComandoMOTD(AdvancedTest):
         # Conexión al servidor        
         self.ircServer.connect(self.testNick)
         
-        # Solicitamos que el servidor nos marque como AWAY        
         self.ircServer.send(self.testNick, "MOTD")                        
 
         # Leemos la respuesta        
@@ -297,7 +295,6 @@ class TestComandoDCCSend(AdvancedTest):
         # Conexión al servidor        
         self.ircServer.connect(self.testNick)
         
-        # Solicitamos que el servidor nos marque como AWAY        
         self.ircServer.send(self.testNick, "PRIVMSG %s :%sDCC SEND megane.pdf 3232235779 34382 1269453%s" % \
                             (self.testNick, b'\x01', b'\x01'))                                         
         #>> :oscar!~oscar@124.Red-95-122-126.staticIP.rima-tde.net PRIVMSG pepe :DCC SEND megane.pdf 1601863292 56289 1269453
@@ -309,7 +306,7 @@ class TestComandoDCCSend(AdvancedTest):
         return self.getScore()
     
     def getDescription(self):
-        return type(self).__name__ + " - Comprueba el funcionamiento del comando AWAY" 
+        return type(self).__name__ + " - Comprueba el funcionamiento del comando DCCSend" 
         
     def getInfo(self):
         return """"""

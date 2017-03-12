@@ -121,3 +121,4 @@ class Connection(object):
 
         command_proxy.func_name = command
         return command_proxy
+

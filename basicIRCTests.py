@@ -198,7 +198,7 @@ class TestComandoNames(BasicTest):
         listaUsuarios = self.ircServer.getChannelUsers(self.testNick, nuevoCanal)
                         
         # ¿Está el usuario en la lista?
-        assert self.testNick in listaUsuarios
+        assert self.testNick in listaUsuarios, "No está %s en la lista de usuarios del canal %s" % (self.testNick, nuevoCanal)
         
         # Todo ha ido bien
         return self.getScore()                    
@@ -235,7 +235,8 @@ class TestCambioNick(BasicTest):
 
         # Comprobamos que el viejo nick no está ya en el canal y que el nuevo sí
         listaUsuarios = self.ircServer.getChannelUsers(self.testNick, nuevoCanal)
-        assert self.testNick not in listaUsuarios and nuevoNick in listaUsuarios                        
+        assert self.testNick not in listaUsuarios, "Sigue estando %s en la lista de usuarios del canal %s tras el cambio de nick" % (self.testNick, nuevoCanal)
+        assert nuevoNick in listaUsuarios, "No está %s en la lista de usuarios del canal %s tras el cambio de nick" % (nuevoNick, nuevoCanal)
                 
         # Dejamos el nick como estaba, para continuar con las pruebas
         self.ircServer.send(self.testNick, "NICK %s" % self.testNick)
@@ -313,6 +314,7 @@ class TestComandoKick(BasicTest):
         
         # Echamos al usuario 2 del canal        
         self.ircServer.send(self.testNick, "KICK #%s %s :Fuera de aqui, rata!" % (nuevoCanal, self.testNick2))
+        logging.debug("Ahora se espera recibir el KICK por el socket de %s" % self.testNick2)
         self.ircServer.expect(self.testNick2, r":\S+ KICK #%s %s :Fuera de aqui, rata!" % (nuevoCanal, self.testNick2))
         
         # Volvemos a unir el usario 2 al canal...
@@ -450,7 +452,7 @@ class TestAbandonarCanal(BasicTest):
         # Comprobamos que el usuario efectivamente ya no se devuelve en ese canal
         listaUsuarios = self.ircServer.getChannelUsers (self.testNick, tempCanal)
         
-        assert self.testNick not in listaUsuarios                        
+        assert self.testNick not in listaUsuarios, "Sigue estando %s en la lista de usuarios del canal %s" % (self.testNick, tempCanal)
         
         #Todo ha ido bien
         return self.getScore()        

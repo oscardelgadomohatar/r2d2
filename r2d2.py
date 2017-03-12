@@ -150,7 +150,8 @@ class ServerDroid(object):
                     
                     # Si no se ha producido ninguna excepción, el test ha ido bien
                     print colored('[CORRECTA] [%.2f] [%s]' % (score, test.tipoTest), 'green') 
-                        
+                    
+                    print("\n")
                 
                     # Actualizamos el número de tests correctos                    
                     numCorrectos += 1                    
